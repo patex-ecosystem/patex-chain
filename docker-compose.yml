@@ -1,0 +1,19 @@
+version: "3"
+
+services:
+
+  patex-chain:
+    image: patex-chain:latest
+    container_name: patex-chain
+    restart: unless-stopped
+    stop_grace_period: 100s
+    ports:
+      - 0.0.0.0:30303:30303/tcp
+      - 0.0.0.0:30303:30303/udp
+      - 127.0.0.11:8545:8545/tcp
+      - 127.0.0.11:8546:8546/tcp
+    volumes:
+      - /home/gitlab-runner/data/patex-chain:/root/.ethereum
+  
+
+

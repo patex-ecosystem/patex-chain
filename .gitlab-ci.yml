@@ -1,0 +1,24 @@
+stages:
+  - build
+  - deploy
+
+build docker continer:
+  stage: build
+  script:
+    - docker build -t patex-chain .
+  when: manual
+  tags:
+    - c-patex-testnode-2
+
+deploy docker continer:
+  stage: deploy
+  script:
+    - docker compose stop patex-chain
+    - sleep 5
+    - docker compose up --detach patex-chain
+    - sleep 5
+    - docker compose logs --tail 100 patex-chain
+    - docker compose ps
+  when: manual
+  tags:
+    - c-patex-testnode-2
