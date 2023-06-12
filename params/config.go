@@ -34,8 +34,9 @@ var (
 	GoerliGenesisHash  = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
 )
 
-// OP Stack chain config
+// PT Stack chain config
 var (
+	PatexMainnetChainId = big.NewInt(789)
 	PatexSepoliaChainId = big.NewInt(471100)
 	PatexGoerliChainId  = big.NewInt(420)
 	// March 17, 2023 @ 7:00:00 pm UTC
@@ -367,6 +368,7 @@ var NetworkNames = map[string]string{
 	GoerliChainConfig.ChainID.String():  "goerli",
 	SepoliaChainConfig.ChainID.String(): "sepolia",
 	PatexSepoliaChainId.String():        "patex-sepolia",
+	PatexMainnetChainId.String():        "patex-mainnet",
 }
 
 // TrustedCheckpoint represents a set of post-processed trie roots (CHT and

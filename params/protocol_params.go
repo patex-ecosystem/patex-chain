@@ -31,7 +31,7 @@ var (
 	// 50% fee from coinbase acumulate on this predeploy rewarder address
 	PATEXMainnetStakingRewarderFeeRecipient = common.HexToAddress("0x14d437dbcE158FC528B13025468EF09030354E01")
 	PATEXTestnetStakingRewarderFeeRecipient = common.HexToAddress("0x89183c312de51b4a9d35b1dd8090e68046ead964")
-	MainnetChainID                          = big.NewInt(1)
+	MainnetChainID                          = big.NewInt(789)
 )
 
 const (
