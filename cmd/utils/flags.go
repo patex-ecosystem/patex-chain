@@ -958,7 +958,6 @@ var (
 		Usage:    "Disable transaction pool gossip.",
 		Value:    true,
 		Category: flags.RollupCategory,
-		Value:    true,
 	}
 
 	// Metrics flags
