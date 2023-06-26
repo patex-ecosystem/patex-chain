@@ -88,6 +88,11 @@ import (
 // are the same for all commands.
 
 var (
+	// Genesis settings
+	GenesisFlag = cli.StringFlag{
+		Name:  "genesis",
+		Usage: "Path to genesis JSON file",
+	}
 	// General settings
 	DataDirFlag = &flags.DirectoryFlag{
 		Name:     "datadir",
@@ -158,7 +163,16 @@ var (
 		Usage:    "Sepolia network: pre-configured proof-of-work test network",
 		Category: flags.EthCategory,
 	}
-
+	PatexSepoliaFlag = &cli.BoolFlag{
+		Name:     "patex.sepolia",
+		Usage:    "Patex Sepolia network: pre-configured test network",
+		Category: flags.EthCategory,
+	}
+	PatexMainnetFlag = &cli.BoolFlag{
+		Name:     "patex.mainnet",
+		Usage:    "Patex Mainnet",
+		Category: flags.EthCategory,
+	}
 	// Dev mode
 	DeveloperFlag = &cli.BoolFlag{
 		Name:     "dev",
@@ -940,6 +954,7 @@ var (
 		Name:     "rollup.disabletxpoolgossip",
 		Usage:    "Disable transaction pool gossip.",
 		Category: flags.RollupCategory,
+		Value:    true,
 	}
 
 	// Metrics flags
