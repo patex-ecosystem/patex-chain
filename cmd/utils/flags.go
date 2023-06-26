@@ -325,7 +325,7 @@ var (
 	LightMaxPeersFlag = &cli.IntFlag{
 		Name:     "light.maxpeers",
 		Usage:    "Maximum number of light clients to serve, or light servers to attach to",
-		Value:    0,
+		Value:    ethconfig.Defaults.LightPeers,
 		Category: flags.LightCategory,
 	}
 	UltraLightServersFlag = &cli.StringFlag{
@@ -828,7 +828,7 @@ var (
 	MaxPeersFlag = &cli.IntFlag{
 		Name:     "maxpeers",
 		Usage:    "Maximum number of network peers (network disabled if set to 0)",
-		Value:    node.DefaultConfig.P2P.MaxPeers,
+		Value:    0,
 		Category: flags.NetworkingCategory,
 	}
 	MaxPendingPeersFlag = &cli.IntFlag{

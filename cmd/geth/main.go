@@ -330,6 +330,14 @@ func prepare(ctx *cli.Context) {
 		ctx.Set(utils.CacheFlag.Name, strconv.Itoa(128))
 	}
 
+	//set PATEX flags: no other geth sync, only through pt-node consensus module
+	if !ctx.IsSet(utils.NoDiscoverFlag.Name) {
+		ctx.Set(utils.NoDiscoverFlag.Name, strconv.Itoa(1))
+	}
+	if !ctx.IsSet(utils.MaxPeersFlag.Name) {
+		ctx.Set(utils.MaxPeersFlag.Name, strconv.Itoa(0))
+	}
+
 	// Start metrics export if enabled
 	utils.SetupMetrics(ctx)
 
