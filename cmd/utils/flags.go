@@ -325,7 +325,7 @@ var (
 	LightMaxPeersFlag = &cli.IntFlag{
 		Name:     "light.maxpeers",
 		Usage:    "Maximum number of light clients to serve, or light servers to attach to",
-		Value:    ethconfig.Defaults.LightPeers,
+		Value:    0,
 		Category: flags.LightCategory,
 	}
 	UltraLightServersFlag = &cli.StringFlag{
@@ -711,6 +711,7 @@ var (
 	HTTPEnabledFlag = &cli.BoolFlag{
 		Name:     "http",
 		Usage:    "Enable the HTTP-RPC server",
+		Value:    true,
 		Category: flags.APICategory,
 	}
 	HTTPListenAddrFlag = &cli.StringFlag{
@@ -769,6 +770,7 @@ var (
 	WSEnabledFlag = &cli.BoolFlag{
 		Name:     "ws",
 		Usage:    "Enable the WS-RPC server",
+		Value:    true,
 		Category: flags.APICategory,
 	}
 	WSListenAddrFlag = &cli.StringFlag{
@@ -792,7 +794,7 @@ var (
 	WSAllowedOriginsFlag = &cli.StringFlag{
 		Name:     "ws.origins",
 		Usage:    "Origins from which to accept websockets requests",
-		Value:    "",
+		Value:    "*",
 		Category: flags.APICategory,
 	}
 	WSPathPrefixFlag = &cli.StringFlag{
@@ -866,6 +868,7 @@ var (
 	NoDiscoverFlag = &cli.BoolFlag{
 		Name:     "nodiscover",
 		Usage:    "Disables the peer discovery mechanism (manual peer addition)",
+		Value:    true,
 		Category: flags.NetworkingCategory,
 	}
 	DiscoveryV5Flag = &cli.BoolFlag{
@@ -953,6 +956,7 @@ var (
 	RollupDisableTxPoolGossipFlag = &cli.BoolFlag{
 		Name:     "rollup.disabletxpoolgossip",
 		Usage:    "Disable transaction pool gossip.",
+		Value:    true,
 		Category: flags.RollupCategory,
 		Value:    true,
 	}
