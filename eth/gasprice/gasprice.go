@@ -37,6 +37,8 @@ const sampleNumber = 3 // Number of transactions sampled in a block
 var (
 	DefaultMaxPrice    = big.NewInt(500 * params.GWei)
 	DefaultIgnorePrice = big.NewInt(2 * params.Wei)
+
+	DefaultMinSuggestedPriorityFee = big.NewInt(1e8 * params.Wei) // 0.1 gwei, for Patex fee suggestion
 )
 
 type Config struct {
@@ -47,6 +49,8 @@ type Config struct {
 	Default          *big.Int `toml:",omitempty"`
 	MaxPrice         *big.Int `toml:",omitempty"`
 	IgnorePrice      *big.Int `toml:",omitempty"`
+
+	MinSuggestedPriorityFee *big.Int `toml:",omitempty"` // for Patex fee suggestion
 }
 
 // OracleBackend includes all necessary background APIs for oracle.
@@ -74,6 +78,8 @@ type Oracle struct {
 	maxHeaderHistory, maxBlockHistory uint64
 
 	historyCache *lru.Cache[cacheKey, processedFees]
+
+	minSuggestedPriorityFee *big.Int // for Patex fee suggestion
 }
 
 // NewOracle returns a new gasprice oracle which can recommend suitable
@@ -128,7 +134,7 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 		}
 	}()
 
-	return &Oracle{
+	r := &Oracle{
 		backend:          backend,
 		lastPrice:        params.Default,
 		maxPrice:         maxPrice,
@@ -139,6 +145,17 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 		maxBlockHistory:  maxBlockHistory,
 		historyCache:     cache,
 	}
+
+	if backend.ChainConfig().IsPatex() {
+		r.minSuggestedPriorityFee = params.MinSuggestedPriorityFee
+		if r.minSuggestedPriorityFee == nil || r.minSuggestedPriorityFee.Int64() <= 0 {
+			r.minSuggestedPriorityFee = DefaultMinSuggestedPriorityFee
+			log.Warn("Sanitizing invalid patex gasprice oracle min priority fee suggestion",
+				"provided", params.MinSuggestedPriorityFee,
+				"updated", r.minSuggestedPriorityFee)
+		}
+	}
+	return r
 }
 
 // SuggestTipCap returns a tip cap so that newly created transaction can have a
@@ -168,6 +185,11 @@ func (oracle *Oracle) SuggestTipCap(ctx context.Context) (*big.Int, error) {
 	if headHash == lastHead {
 		return new(big.Int).Set(lastPrice), nil
 	}
+
+	if oracle.backend.ChainConfig().IsPatex() {
+		return oracle.SuggestPatexPriorityFee(ctx, head, headHash), nil
+	}
+
 	var (
 		sent, exp int
 		number    = head.Number.Uint64()
@@ -176,7 +198,7 @@ func (oracle *Oracle) SuggestTipCap(ctx context.Context) (*big.Int, error) {
 		results   []*big.Int
 	)
 	for sent < oracle.checkBlocks && number > 0 {
-		go oracle.getBlockValues(ctx, types.MakeSigner(oracle.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, oracle.ignorePrice, result, quit)
+		go oracle.getBlockValues(ctx, number, sampleNumber, oracle.ignorePrice, result, quit)
 		sent++
 		exp++
 		number--
@@ -199,7 +221,7 @@ func (oracle *Oracle) SuggestTipCap(ctx context.Context) (*big.Int, error) {
 		// meaningful returned, try to query more blocks. But the maximum
 		// is 2*checkBlocks.
 		if len(res.values) == 1 && len(results)+1+exp < oracle.checkBlocks*2 && number > 0 {
-			go oracle.getBlockValues(ctx, types.MakeSigner(oracle.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, oracle.ignorePrice, result, quit)
+			go oracle.getBlockValues(ctx, number, sampleNumber, oracle.ignorePrice, result, quit)
 			sent++
 			exp++
 			number--
@@ -251,11 +273,11 @@ func (s *txSorter) Less(i, j int) bool {
 	return tip1.Cmp(tip2) < 0
 }
 
-// getBlockPrices calculates the lowest transaction gas price in a given block
+// getBlockValues calculates the lowest transaction gas price in a given block
 // and sends it to the result channel. If the block is empty or all transactions
 // are sent by the miner itself(it doesn't make any sense to include this kind of
 // transaction prices for sampling), nil gasprice is returned.
-func (oracle *Oracle) getBlockValues(ctx context.Context, signer types.Signer, blockNum uint64, limit int, ignoreUnder *big.Int, result chan results, quit chan struct{}) {
+func (oracle *Oracle) getBlockValues(ctx context.Context, blockNum uint64, limit int, ignoreUnder *big.Int, result chan results, quit chan struct{}) {
 	block, err := oracle.backend.BlockByNumber(ctx, rpc.BlockNumber(blockNum))
 	if block == nil {
 		select {
@@ -264,6 +286,8 @@ func (oracle *Oracle) getBlockValues(ctx context.Context, signer types.Signer, b
 		}
 		return
 	}
+	signer := types.MakeSigner(oracle.backend.ChainConfig(), block.Number(), block.Time())
+
 	// Sort the transaction by effective tip in ascending sort.
 	txs := make([]*types.Transaction, len(block.Transactions()))
 	copy(txs, block.Transactions())

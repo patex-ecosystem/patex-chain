@@ -1,30 +1,30 @@
-title: "pt-geth - go-ethereum fork diff overview"
+title: "op-geth - go-ethereum fork diff overview"
 footer: |
-  Fork-diff overview of [`pt-geth`](https://github.com/patex-ecosystem/patex-chain), a fork of [`go-ethereum`](https://github.com/ethereum/go-ethereum).
-  and execution-engine of the [PT-stack](https://gitlab.profitserver.in.ua/cpatex/cpex-network).
+  Fork-diff overview of [`op-geth`](https://github.com/ethereum-patex/op-geth), a fork of [`go-ethereum`](https://github.com/ethereum/go-ethereum).
+  and execution-engine of the [OP-stack](https://github.com/ethereum-patex/patex).
 base:
   name: go-ethereum
   url: https://github.com/ethereum/go-ethereum
-  hash: ea9e62ca3db5c33aa7438ebf39c189afd53c6bf8
+  hash: e501b3b05db8e169f67dc78b7b59bc352b3c638d
 fork:
-  name: pt-geth
-  url: https://github.com/patex-ecosystem/patex-chain
+  name: op-geth
+  url: https://github.com/ethereum-patex/op-geth
   ref: refs/heads/patex
 def:
-  title: "pt-geth"
+  title: "op-geth"
   description: |
-    This is an overview of the changes in [`pt-geth`](https://github.com/patex-ecosystem/patex-chain),
-    a fork of [`go-ethereum`](https://github.com/ethereum/go-ethereum), part of the PT-stack.
+    This is an overview of the changes in [`op-geth`](https://github.com/ethereum-patex/op-geth),
+    a fork of [`go-ethereum`](https://github.com/ethereum/go-ethereum), part of the OP-stack.
 
-    The pt-stack architecture is modular, following the Consensus/Execution split of post-Merge Ethereum L1:
+    The OP-stack architecture is modular, following the Consensus/Execution split of post-Merge Ethereum L1:
 
-      - [`pt-node`](https://gitlab.profitserver.in.ua/cpatex/cpex-network/-/tree/main/pt-node) implements most rollup-specific functionality as Consensus-Layer, similar to a L1 beacon-node. 
-      - [`pt-geth`](https://github.com/patex-ecosystem/patex-chain) implements the Execution-Layer, with **minimal changes** for a secure Ethereum-equivalent application environment.
+      - [`op-node`](https://github.com/ethereum-patex/patex/tree/develop/op-node) implements most rollup-specific functionality as Consensus-Layer, similar to a L1 beacon-node. 
+      - [`op-geth`](https://github.com/ethereum-patex/op-geth) implements the Execution-Layer, with **minimal changes** for a secure Ethereum-equivalent application environment.
 
-    Related [pt-stack specifications](https://gitlab.profitserver.in.ua/cpatex/cpex-network/-/tree/main/specs):
+    Related [op-stack specifications](https://github.com/ethereum-patex/patex/tree/develop/specs):
 
-    - [L2 Execution Engine spec](https://gitlab.profitserver.in.ua/cpatex/cpex-network/-/blob/main/specs/exec-engine.md)
-    - [Deposit Transaction spec](https://gitlab.profitserver.in.ua/cpatex/cpex-network/-/blob/main/specs/deposits.md)
+    - [L2 Execution Engine spec](https://github.com/ethereum-patex/patex/blob/develop/specs/exec-engine.md)
+    - [Deposit Transaction spec](https://github.com/ethereum-patex/patex/blob/develop/specs/deposits.md)
   sub:
     - title: "Core modifications"
       sub:
@@ -35,7 +35,7 @@ def:
               description: |
                 The Bedrock upgrade introduces a `Deposit` transaction-type (`0x7E`) to enable both users and the
                 rollup system itself to change the L2 state based on L1 events and system rules as
-                [specified](https://gitlab.profitserver.in.ua/cpatex/cpex-network/-/blob/main/specs/deposits.md).
+                [specified](https://github.com/ethereum-patex/patex/blob/develop/specs/deposits.md).
               globs:
                 - "core/types/deposit_tx.go"
                 - "core/types/transaction_marshalling.go"
@@ -96,7 +96,7 @@ def:
           description: |
             The Engine API is extended to insert transactions into the block and optionally exclude the tx-pool,
             to reproduce the exact block of the sequencer from just the inputs, as derived from L1 by the rollup-node.
-            See [L2 execution engine specs](https://gitlab.profitserver.in.ua/cpatex/cpex-network/-/blob/main/specs/exec-engine.md).
+            See [L2 execution engine specs](https://github.com/ethereum-patex/patex/blob/develop/specs/exec-engine.md).
           globs:
             - "beacon/engine/types.go"
             - "beacon/engine/gen_blockparams.go"
@@ -130,7 +130,7 @@ def:
                 - "internal/flags/categories.go"
                 - "cmd/geth/config.go"
             - title: "Versioning"
-              description: List the pt-geth and upstream go-ethereum versions.
+              description: List the op-geth and upstream go-ethereum versions.
               globs:
                 - "cmd/geth/misccmd.go"
                 - "params/version.go"
@@ -163,7 +163,7 @@ def:
           globs:
             - "eth/state_accessor.go"
         - title: API frontend
-          description: Format deposit and L1-cost data in transaction responses.
+          description: Format deposit and L1-cost data in transaction responses. Add `debug_chainConfig` API.
           globs:
             - "internal/ethapi/api.go"
             - "rpc/errors.go"
@@ -188,8 +188,8 @@ def:
             - "accounts/abi/bind/backends/simulated.go"
         - title: diff-included testing testing
           description: |
-            Most of the pt-geth changes are tested in the Patex Monorepo and not part of the geth diff,
-            but some testing like the Deposit TX encoding and API interactions are embedded in the pt-geth diff instead.
+            Most of the op-geth changes are tested in the Patex Monorepo and not part of the geth diff,
+            but some testing like the Deposit TX encoding and API interactions are embedded in the op-geth diff instead.
           globs:
             - "core/types/transaction_marshalling_test.go"
             - "internal/ethapi/api_test.go"

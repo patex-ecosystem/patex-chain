@@ -54,7 +54,7 @@ jobs:
       docker_name:
         description: Docker image name
         type: string
-        default: "pt-geth"
+        default: "op-geth"
       docker_tags:
         description: Docker image tags as csv
         type: string
@@ -107,7 +107,7 @@ jobs:
             - run:
                 name: Tag
                 command: |
-                  ./.circleci/ci-docker-tag-pt-geth-release.sh <<parameters.registry>>/<<parameters.repo>> $CIRCLE_TAG $CIRCLE_SHA1
+                  ./.circleci/ci-docker-tag-op-geth-release.sh <<parameters.registry>>/<<parameters.repo>> $CIRCLE_TAG $CIRCLE_SHA1
 
 
   build-geth:

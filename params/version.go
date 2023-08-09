@@ -23,12 +23,12 @@ import (
 // Version is the version of upstream geth
 const (
 	VersionMajor = 1        // Major version component of the current release
-	VersionMinor = 11       // Minor version component of the current release
-	VersionPatch = 6        // Patch version component of the current release
+	VersionMinor = 12       // Minor version component of the current release
+	VersionPatch = 0        // Patch version component of the current release
 	VersionMeta  = "stable" // Version metadata to append to the version string
 )
 
-// OPVersion is the version of pt-geth
+// OPVersion is the version of op-geth
 const (
 	OPVersionMajor = 0          // Major version component of the current release
 	OPVersionMinor = 1          // Minor version component of the current release

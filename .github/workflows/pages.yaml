@@ -25,8 +25,8 @@ jobs:
           mkdir -p tmp/pages
           mv index.html tmp/pages/index.html
           touch tmp/pages/.nojekyll
-          if [ "$GITHUB_REPOSITORY" == "ethereum-patex/pt-geth" ]; then
-              echo "pt-geth.patex.io" > tmp/pages/CNAME
+          if [ "$GITHUB_REPOSITORY" == "ethereum-patex/op-geth" ]; then
+              echo "op-geth.patex.io" > tmp/pages/CNAME
           fi;
 
       - name: Deploy
