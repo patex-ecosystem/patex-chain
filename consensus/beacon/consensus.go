@@ -270,11 +270,11 @@ func (beacon *Beacon) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 	}
 	// Verify the existence / non-existence of excessDataGas
 	cancun := chain.Config().IsCancun(header.Time)
-	if cancun && header.ExcessDataGas == nil {
+	if cancun && header.ExcessBlobGas == nil {
 		return errors.New("missing excessDataGas")
 	}
-	if !cancun && header.ExcessDataGas != nil {
-		return fmt.Errorf("invalid excessDataGas: have %d, expected nil", header.ExcessDataGas)
+	if !cancun && header.ExcessBlobGas != nil {
+		return fmt.Errorf("invalid excessDataGas: have %d, expected nil", header.ExcessBlobGas)
 	}
 	return nil
 }
