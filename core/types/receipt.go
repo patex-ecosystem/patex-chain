@@ -63,7 +63,9 @@ type Receipt struct {
 	TxHash            common.Hash    `json:"transactionHash" gencodec:"required"`
 	ContractAddress   common.Address `json:"contractAddress"`
 	GasUsed           uint64         `json:"gasUsed" gencodec:"required"`
-	EffectiveGasPrice *big.Int       `json:"effectiveGasPrice"`
+	EffectiveGasPrice *big.Int       `json:"effectiveGasPrice"` // required, but tag omitted for backwards compatibility
+	BlobGasUsed       uint64         `json:"blobGasUsed,omitempty"`
+	BlobGasPrice      *big.Int       `json:"blobGasPrice,omitempty"`
 
 	// DepositNonce was introduced in Regolith to store the actual nonce used by deposit transactions
 	// The state transition process ensures this is only set for Regolith deposit transactions.
@@ -88,6 +90,9 @@ type receiptMarshaling struct {
 	Status            hexutil.Uint64
 	CumulativeGasUsed hexutil.Uint64
 	GasUsed           hexutil.Uint64
+	EffectiveGasPrice *hexutil.Big
+	BlobGasUsed       hexutil.Uint64
+	BlobGasPrice      *hexutil.Big
 	BlockNumber       *hexutil.Big
 	TransactionIndex  hexutil.Uint
 
@@ -295,7 +300,7 @@ func (r *Receipt) decodeTyped(b []byte) error {
 		return errShortTypedReceipt
 	}
 	switch b[0] {
-	case DynamicFeeTxType, AccessListTxType:
+	case DynamicFeeTxType, AccessListTxType, BlobTxType:
 		var data receiptRLP
 		err := rlp.DecodeBytes(b[1:], &data)
 		if err != nil {
@@ -461,6 +466,9 @@ func (rs Receipts) EncodeIndex(i int, w *bytes.Buffer) {
 		w.WriteByte(AccessListTxType)
 		rlp.Encode(w, data)
 	case DynamicFeeTxType:
+		w.WriteByte(DynamicFeeTxType)
+		rlp.Encode(w, data)
+	case BlobTxType:
 		w.WriteByte(DynamicFeeTxType)
 		rlp.Encode(w, data)
 	case DepositTxType:
