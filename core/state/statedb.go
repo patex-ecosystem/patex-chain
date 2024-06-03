@@ -389,6 +389,84 @@ func (s *StateDB) HasSuicided(addr common.Address) bool {
 	return false
 }
 
+type BalanceValues struct {
+	Flags     uint8
+	Fixed     *big.Int
+	Shares    *big.Int
+	Remainder *big.Int
+}
+
+func (s *StateDB) GetBalanceValues(addr common.Address) *BalanceValues {
+	stateObject := s.getStateObject(addr)
+
+	if stateObject == nil {
+		return &BalanceValues{
+			Flags:     0,
+			Fixed:     common.Big0,
+			Shares:    common.Big0,
+			Remainder: common.Big0,
+		}
+	}
+
+	return &BalanceValues{
+		Flags:     stateObject.data.Flags,
+		Fixed:     stateObject.data.Fixed,
+		Shares:    stateObject.data.Shares,
+		Remainder: stateObject.data.Remainder,
+	}
+}
+
+var (
+	sharePriceSlot = common.BigToHash(big.NewInt(1))
+	shareCountSlot = common.BigToHash(big.NewInt(51))
+)
+
+func (s *StateDB) getSharePrice() *big.Int {
+	return s.GetState(params.BlastSharesAddress, sharePriceSlot).Big()
+}
+
+func (s *StateDB) adjustShareCount(pre, post *big.Int) {
+	if pre.Cmp(post) == 0 {
+		return
+	}
+
+	shareCount := s.GetState(params.BlastSharesAddress, shareCountSlot).Big()
+	shareCount.Add(shareCount, post)
+	shareCount.Sub(shareCount, pre)
+
+	s.SetState(params.BlastSharesAddress, shareCountSlot, common.BigToHash(shareCount))
+}
+
+func (s *StateDB) GetClaimableAmount(addr common.Address) *big.Int {
+	stateObject := s.getStateObject(addr)
+	if stateObject != nil {
+		return stateObject.GetClaimableAmount()
+	}
+	return common.Big0
+}
+
+func (s *StateDB) GetFlags(addr common.Address) uint8 {
+	stateObject := s.getStateObject(addr)
+	if stateObject != nil {
+		return stateObject.Flags()
+	}
+	return 0
+}
+
+func (s *StateDB) SetFlags(addr common.Address, flags uint8) {
+	stateObject := s.GetOrNewStateObject(addr)
+	if stateObject != nil {
+		stateObject.SetFlags(flags)
+	}
+}
+
+func (s *StateDB) SubClaimableAmount(addr common.Address, value *big.Int) {
+	stateObject := s.GetOrNewStateObject(addr)
+	if stateObject != nil {
+		stateObject.SubClaimableAmount(value)
+	}
+}
+
 /*
  * SETTERS
  */
@@ -462,13 +540,19 @@ func (s *StateDB) Suicide(addr common.Address) bool {
 	if stateObject == nil {
 		return false
 	}
+	prevShares := new(big.Int).Set(stateObject.data.Shares)
 	s.journal.append(suicideChange{
-		account:     &addr,
-		prev:        stateObject.suicided,
-		prevbalance: new(big.Int).Set(stateObject.Balance()),
+		account:       &addr,
+		prev:          stateObject.suicided,
+		prevFixed:     new(big.Int).Set(stateObject.data.Fixed),
+		prevShares:    prevShares,
+		prevRemainder: new(big.Int).Set(stateObject.data.Remainder),
 	})
 	stateObject.markSuicided()
-	stateObject.data.Balance = new(big.Int)
+	stateObject.data.Fixed = new(big.Int)
+	stateObject.data.Shares = new(big.Int)
+	stateObject.data.Remainder = new(big.Int)
+	s.adjustShareCount(prevShares, stateObject.data.Shares)
 
 	return true
 }
@@ -521,7 +605,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// enough to track account updates at commit time, deletions need tracking
 	// at transaction boundary level to ensure we capture state clearing.
 	if s.snap != nil {
-		s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.CodeHash)
+		s.snapAccounts[obj.addrHash] = types.SlimAccountRLP(obj.data)
 	}
 }
 
@@ -570,10 +654,13 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 				return nil
 			}
 			data = &types.StateAccount{
-				Nonce:    acc.Nonce,
-				Balance:  acc.Balance,
-				CodeHash: acc.CodeHash,
-				Root:     common.BytesToHash(acc.Root),
+				Nonce:     acc.Nonce,
+				Flags:     acc.Flags,
+				Fixed:     acc.Fixed,
+				Shares:    acc.Shares,
+				Remainder: acc.Remainder,
+				CodeHash:  acc.CodeHash,
+				Root:      common.BytesToHash(acc.Root),
 			}
 			if len(data.CodeHash) == 0 {
 				data.CodeHash = types.EmptyCodeHash.Bytes()
@@ -600,7 +687,7 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 		}
 	}
 	// Insert into the live set
-	obj := newObject(s, addr, *data)
+	obj := newObject(s, addr, data)
 	s.setStateObject(obj)
 	return obj
 }
@@ -630,7 +717,7 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 			s.stateObjectsDestruct[prev.address] = struct{}{}
 		}
 	}
-	newobj = newObject(s, addr, types.StateAccount{})
+	newobj = newObject(s, addr, &types.StateAccount{})
 	if prev == nil {
 		s.journal.append(createObjectChange{account: &addr})
 	} else {
@@ -656,7 +743,7 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 func (s *StateDB) CreateAccount(addr common.Address) {
 	newObj, prev := s.createObject(addr)
 	if prev != nil {
-		newObj.setBalance(prev.data.Balance)
+		newObj.setBalanceValues(prev.data.Flags, prev.data.Fixed, prev.data.Shares, prev.data.Remainder)
 	}
 }
 

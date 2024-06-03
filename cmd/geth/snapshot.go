@@ -517,14 +517,17 @@ func dumpState(ctx *cli.Context) error {
 		Root common.Hash `json:"root"`
 	}{root})
 	for accIt.Next() {
-		account, err := snapshot.FullAccount(accIt.Account())
+		account, err := types.FullAccount(accIt.Account())
 		if err != nil {
 			return err
 		}
 		da := &state.DumpAccount{
-			Balance:   account.Balance.String(),
+			Flags:     account.Flags,
+			Shares:    account.Shares.String(),
+			Remainder: account.Remainder.String(),
+			Fixed:     account.Fixed.String(),
 			Nonce:     account.Nonce,
-			Root:      account.Root,
+			Root:      account.Root.Bytes(),
 			CodeHash:  account.CodeHash,
 			SecureKey: accIt.Hash().Bytes(),
 		}

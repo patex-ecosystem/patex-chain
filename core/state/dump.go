@@ -49,7 +49,11 @@ type DumpCollector interface {
 
 // DumpAccount represents an account in the state.
 type DumpAccount struct {
+	Flags     uint8                  `json:"flags"`
 	Balance   string                 `json:"balance"`
+	Fixed     string                 `json:"fixed"`
+	Shares    string                 `json:"shares"`
+	Remainder string                 `json:"remainder"`
 	Nonce     uint64                 `json:"nonce"`
 	Root      hexutil.Bytes          `json:"root"`
 	CodeHash  hexutil.Bytes          `json:"codeHash"`
@@ -146,7 +150,10 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 			panic(err)
 		}
 		account := DumpAccount{
-			Balance:   data.Balance.String(),
+			Flags:     data.Flags,
+			Fixed:     data.Fixed.String(),
+			Shares:    data.Shares.String(),
+			Remainder: data.Remainder.String(),
 			Nonce:     data.Nonce,
 			Root:      data.Root[:],
 			CodeHash:  data.CodeHash,
@@ -162,7 +169,7 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 			account.SecureKey = it.Key
 		}
 		addr := common.BytesToAddress(addrBytes)
-		obj := newObject(s, addr, data)
+		obj := newObject(s, addr, &data)
 		if !conf.SkipCode {
 			account.Code = obj.Code(s.db)
 		}
