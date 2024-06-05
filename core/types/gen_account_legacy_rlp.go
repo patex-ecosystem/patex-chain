@@ -20,7 +20,7 @@ func (obj *StateAccountLegacy) EncodeRLP(_w io.Writer) error {
 		}
 		w.WriteBigInt(obj.Balance)
 	}
-	w.WriteBytes(obj.Root[:])
+	w.WriteBytes(obj.Root)
 	w.WriteBytes(obj.CodeHash)
 	w.ListEnd(_tmp0)
 	return w.Flush()

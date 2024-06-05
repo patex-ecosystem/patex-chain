@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/VictoriaMetrics/fastcache"
@@ -571,9 +572,23 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 			return nil
 		}
 		// Retrieve the current account and flatten it into the internal format
-		var acc types.StateAccount
+		var (
+			acc        types.StateAccount
+			acc_legacy types.StateAccountLegacy
+		)
 		if err := rlp.DecodeBytes(val, &acc); err != nil {
-			log.Crit("Invalid account encountered during snapshot creation", "err", err)
+			//we've error, try read legacy account object
+			if err := rlp.DecodeBytes(val, &acc_legacy); err != nil {
+				log.Crit("Invalid account encountered during snapshot creation", "err", err)
+			}
+			acc = types.StateAccount{
+				Nonce:     acc_legacy.Nonce,
+				Fixed:     acc_legacy.Balance,
+				Shares:    new(big.Int),
+				Remainder: new(big.Int),
+				CodeHash:  acc_legacy.CodeHash,
+			}
+			acc.Root.SetBytes(acc_legacy.Root)
 		}
 		// If the account is not yet in-progress, write it out
 		if accMarker == nil || !bytes.Equal(account[:], accMarker) {

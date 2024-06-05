@@ -37,7 +37,7 @@ const (
 type StateAccountLegacy struct {
 	Nonce    uint64
 	Balance  *big.Int
-	Root     common.Hash // merkle root of the storage trie
+	Root     []byte // merkle root of the storage trie
 	CodeHash []byte
 }
 
@@ -106,16 +106,33 @@ func SlimAccountRLP(account StateAccount) []byte {
 // FullAccount decodes the data on the 'slim RLP' format and returns
 // the consensus format account.
 func FullAccount(data []byte) (*StateAccount, error) {
-	var slim SlimAccount
+	var (
+		slim    SlimAccount
+		legacy  StateAccountLegacy
+		account StateAccount
+	)
+
 	if err := rlp.DecodeBytes(data, &slim); err != nil {
-		return nil, err
-	}
-	account := StateAccount{
-		Nonce:     slim.Nonce,
-		Flags:     slim.Flags,
-		Fixed:     slim.Fixed,
-		Shares:    slim.Shares,
-		Remainder: slim.Remainder,
+		//we've error, try read legacy account object
+		if err := rlp.DecodeBytes(data, &legacy); err != nil {
+			return nil, err
+		}
+		//let's extend legacy account with new fields
+
+		account = StateAccount{
+			Nonce:     legacy.Nonce,
+			Fixed:     new(big.Int),
+			Shares:    new(big.Int),
+			Remainder: new(big.Int),
+		}
+	} else {
+		account = StateAccount{
+			Nonce:     slim.Nonce,
+			Flags:     slim.Flags,
+			Fixed:     slim.Fixed,
+			Shares:    slim.Shares,
+			Remainder: slim.Remainder,
+		}
 	}
 
 	// Interpret the storage root and code hash in slim format.
