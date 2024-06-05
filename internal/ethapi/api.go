@@ -659,6 +659,30 @@ func (s *BlockChainAPI) GetBalance(ctx context.Context, address common.Address, 
 	return (*hexutil.Big)(state.GetBalance(address)), state.Error()
 }
 
+type BalanceValuesResult struct {
+	Flags     hexutil.Uint64 `json:"flags"`
+	Fixed     *hexutil.Big   `json:"fixed"`
+	Shares    *hexutil.Big   `json:"shares"`
+	Remainder *hexutil.Big   `json:"remainder"`
+}
+
+func (s *BlockChainAPI) GetBalanceValues(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*BalanceValuesResult, error) {
+	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+	if state == nil || err != nil {
+		return nil, err
+	}
+
+	values := state.GetBalanceValues(address)
+	result := &BalanceValuesResult{
+		Flags:     hexutil.Uint64(values.Flags),
+		Fixed:     (*hexutil.Big)(values.Fixed),
+		Shares:    (*hexutil.Big)(values.Shares),
+		Remainder: (*hexutil.Big)(values.Remainder),
+	}
+
+	return result, state.Error()
+}
+
 // Result structs for GetProof
 type AccountResult struct {
 	Address      common.Address  `json:"address"`
