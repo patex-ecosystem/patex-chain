@@ -25,7 +25,7 @@ import (
 )
 
 //go:generate go run ../../rlp/rlpgen -type StateAccount -out gen_account_rlp.go
-
+//go:generate go run ../../rlp/rlpgen -type StateAccountLegacy -out gen_account_legacy_rlp.go
 const (
 	YieldAutomatic = iota
 	YieldDisabled
