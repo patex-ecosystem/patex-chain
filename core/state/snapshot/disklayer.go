@@ -77,7 +77,7 @@ func (dl *diskLayer) Account(hash common.Hash) (*types.SlimAccount, error) {
 	}
 	account := new(types.SlimAccount)
 	if err := rlp.DecodeBytes(data, account); err != nil {
-		var legacy types.StateAccountLegacy
+		legacy := new(types.StateAccountLegacy)
 		if err := rlp.DecodeBytes(data, legacy); err != nil {
 			panic(err)
 		}

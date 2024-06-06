@@ -102,7 +102,7 @@ func CheckJournalAccount(db ethdb.KeyValueStore, hash common.Hash) error {
 	if data := rawdb.ReadAccountSnapshot(db, hash); data != nil {
 		account := new(types.SlimAccount)
 		if err := rlp.DecodeBytes(data, account); err != nil {
-			var legacy types.StateAccountLegacy
+			legacy := new(types.StateAccountLegacy)
 			if err := rlp.DecodeBytes(data, legacy); err != nil {
 				panic(err)
 			}
@@ -146,7 +146,7 @@ func CheckJournalAccount(db ethdb.KeyValueStore, hash common.Hash) error {
 		if data, ok := accounts[hash]; ok {
 			account := new(types.SlimAccount)
 			if err := rlp.DecodeBytes(data, account); err != nil {
-				var legacy types.StateAccountLegacy
+				legacy := new(types.StateAccountLegacy)
 				if err := rlp.DecodeBytes(data, legacy); err != nil {
 					panic(err)
 				}
