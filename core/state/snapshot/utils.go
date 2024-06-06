@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/types"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -101,7 +102,17 @@ func CheckJournalAccount(db ethdb.KeyValueStore, hash common.Hash) error {
 	if data := rawdb.ReadAccountSnapshot(db, hash); data != nil {
 		account := new(types.SlimAccount)
 		if err := rlp.DecodeBytes(data, account); err != nil {
-			panic(err)
+			var legacy types.StateAccountLegacy
+			if err := rlp.DecodeBytes(data, legacy); err != nil {
+				panic(err)
+			}
+			account.Nonce = legacy.Nonce
+			account.Flags = types.YieldDisabled
+			account.Fixed = legacy.Balance
+			account.Shares = new(big.Int)
+			account.Remainder = new(big.Int)
+			account.Root = legacy.Root
+			account.CodeHash = legacy.CodeHash
 		}
 		fmt.Printf("\taccount.nonce: %d\n", account.Nonce)
 		fmt.Printf("\taccount.flags: %d\n", account.Flags)
@@ -135,7 +146,17 @@ func CheckJournalAccount(db ethdb.KeyValueStore, hash common.Hash) error {
 		if data, ok := accounts[hash]; ok {
 			account := new(types.SlimAccount)
 			if err := rlp.DecodeBytes(data, account); err != nil {
-				panic(err)
+				var legacy types.StateAccountLegacy
+				if err := rlp.DecodeBytes(data, legacy); err != nil {
+					panic(err)
+				}
+				account.Nonce = legacy.Nonce
+				account.Flags = types.YieldDisabled
+				account.Fixed = legacy.Balance
+				account.Shares = new(big.Int)
+				account.Remainder = new(big.Int)
+				account.Root = legacy.Root
+				account.CodeHash = legacy.CodeHash
 			}
 			fmt.Printf("\taccount.nonce: %d\n", account.Nonce)
 			fmt.Printf("\taccount.flags: %d\n", account.Flags)

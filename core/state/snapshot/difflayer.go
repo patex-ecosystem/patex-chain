@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/types"
 	"math"
+	"math/big"
 	"math/rand"
 	"sort"
 	"sync"
@@ -282,8 +283,19 @@ func (dl *diffLayer) Account(hash common.Hash) (*types.SlimAccount, error) {
 		return nil, nil
 	}
 	account := new(types.SlimAccount)
+
 	if err := rlp.DecodeBytes(data, account); err != nil {
-		panic(err)
+		var legacy types.StateAccountLegacy
+		if err := rlp.DecodeBytes(data, legacy); err != nil {
+			panic(err)
+		}
+		account.Nonce = legacy.Nonce
+		account.Flags = types.YieldDisabled
+		account.Fixed = legacy.Balance
+		account.Shares = new(big.Int)
+		account.Remainder = new(big.Int)
+		account.Root = legacy.Root
+		account.CodeHash = legacy.CodeHash
 	}
 	return account, nil
 }
