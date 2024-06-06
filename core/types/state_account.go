@@ -121,7 +121,8 @@ func FullAccount(data []byte) (*StateAccount, error) {
 
 		account = StateAccount{
 			Nonce:     legacy.Nonce,
-			Fixed:     new(big.Int),
+			Flags:     YieldDisabled,
+			Fixed:     legacy.Balance,
 			Shares:    new(big.Int),
 			Remainder: new(big.Int),
 		}

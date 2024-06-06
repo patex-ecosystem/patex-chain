@@ -583,6 +583,7 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 			}
 			acc = types.StateAccount{
 				Nonce:     acc_legacy.Nonce,
+				Flags:     types.YieldDisabled,
 				Fixed:     acc_legacy.Balance,
 				Shares:    new(big.Int),
 				Remainder: new(big.Int),
