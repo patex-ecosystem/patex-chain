@@ -33,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	cli "github.com/urfave/cli/v2"
 )
@@ -295,11 +294,12 @@ func traverseState(ctx *cli.Context) error {
 	accIter := trie.NewIterator(t.NodeIterator(nil))
 	for accIter.Next() {
 		accounts += 1
-		var acc types.StateAccount
-		if err := rlp.DecodeBytes(accIter.Value, &acc); err != nil {
+		var acc *types.StateAccount
+		if acc, err = types.StateAccountFromData(accIter.Value); err != nil {
 			log.Error("Invalid account encountered during traversal", "err", err)
 			return err
 		}
+
 		if acc.Root != types.EmptyRootHash {
 			id := trie.StorageTrieID(root, common.BytesToHash(accIter.Key), acc.Root)
 			storageTrie, err := trie.NewStateTrie(id, triedb)
@@ -410,8 +410,8 @@ func traverseRawState(ctx *cli.Context) error {
 		// dig into the storage trie further.
 		if accIter.Leaf() {
 			accounts += 1
-			var acc types.StateAccount
-			if err := rlp.DecodeBytes(accIter.LeafBlob(), &acc); err != nil {
+			var acc *types.StateAccount
+			if acc, err = types.StateAccountFromData(accIter.LeafBlob()); err != nil {
 				log.Error("Invalid account encountered during traversal", "err", err)
 				return errors.New("invalid account")
 			}

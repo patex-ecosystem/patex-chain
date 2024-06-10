@@ -158,3 +158,22 @@ func FullAccountRLP(data []byte) ([]byte, error) {
 	}
 	return rlp.EncodeToBytes(account)
 }
+
+func StateAccountFromData(data []byte) (*StateAccount, error) {
+	ret := new(StateAccount)
+	err := rlp.DecodeBytes(data, ret)
+	if err != nil {
+		var legacy StateAccountLegacy
+		if err = rlp.DecodeBytes(data, &legacy); err != nil {
+			return nil, err
+		}
+		ret.Nonce = legacy.Nonce
+		ret.Flags = YieldDisabled
+		ret.Fixed = legacy.Balance
+		ret.Shares = new(big.Int)
+		ret.Remainder = new(big.Int)
+		ret.Root.SetBytes(legacy.Root)
+		ret.CodeHash = legacy.CodeHash
+	}
+	return ret, err
+}

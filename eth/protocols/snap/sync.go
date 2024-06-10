@@ -40,7 +40,6 @@ import (
 	"github.com/ethereum/go-ethereum/light"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/msgrate"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	"golang.org/x/crypto/sha3"
 )
@@ -2409,8 +2408,8 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	}
 	accs := make([]*types.StateAccount, len(accounts))
 	for i, account := range accounts {
-		acc := new(types.StateAccount)
-		if err := rlp.DecodeBytes(account, acc); err != nil {
+		var acc *types.StateAccount
+		if acc, err = types.StateAccountFromData(account); err != nil {
 			panic(err) // We created these blobs, we must be able to decode them
 		}
 		accs[i] = acc
@@ -2897,11 +2896,14 @@ func (s *Syncer) onHealByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) e
 // Note it's not concurrent safe, please handle the concurrent issue outside.
 func (s *Syncer) onHealState(paths [][]byte, value []byte) error {
 	if len(paths) == 1 {
-		var account types.StateAccount
-		if err := rlp.DecodeBytes(value, &account); err != nil {
+		var (
+			account *types.StateAccount
+			err     error
+		)
+		if account, err = types.StateAccountFromData(value); err != nil {
 			return nil // Returning the error here would drop the remote peer
 		}
-		blob := types.SlimAccountRLP(account)
+		blob := types.SlimAccountRLP(*account)
 		rawdb.WriteAccountSnapshot(s.stateWriter, common.BytesToHash(paths[0]), blob)
 		s.accountHealed += 1
 		s.accountHealedBytes += common.StorageSize(1 + common.HashLength + len(blob))

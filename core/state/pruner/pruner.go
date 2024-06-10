@@ -33,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -433,8 +432,8 @@ func extractGenesis(db ethdb.Database, stateBloom *stateBloom) error {
 		// If it's a leaf node, yes we are touching an account,
 		// dig into the storage trie further.
 		if accIter.Leaf() {
-			var acc types.StateAccount
-			if err := rlp.DecodeBytes(accIter.LeafBlob(), &acc); err != nil {
+			var acc *types.StateAccount
+			if acc, err = types.StateAccountFromData(accIter.LeafBlob()); err != nil {
 				return err
 			}
 			if acc.Root != types.EmptyRootHash {

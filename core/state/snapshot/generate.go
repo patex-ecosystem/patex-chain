@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/VictoriaMetrics/fastcache"
@@ -573,23 +572,11 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 		}
 		// Retrieve the current account and flatten it into the internal format
 		var (
-			acc        types.StateAccount
-			acc_legacy types.StateAccountLegacy
+			acc *types.StateAccount
+			err error
 		)
-		if err := rlp.DecodeBytes(val, &acc); err != nil {
-			//we've error, try read legacy account object
-			if err := rlp.DecodeBytes(val, &acc_legacy); err != nil {
-				log.Crit("Invalid account encountered during snapshot creation", "err", err)
-			}
-			acc = types.StateAccount{
-				Nonce:     acc_legacy.Nonce,
-				Flags:     types.YieldDisabled,
-				Fixed:     acc_legacy.Balance,
-				Shares:    new(big.Int),
-				Remainder: new(big.Int),
-				CodeHash:  acc_legacy.CodeHash,
-			}
-			acc.Root.SetBytes(acc_legacy.Root)
+		if acc, err = types.StateAccountFromData(val); err != nil {
+			log.Crit("Invalid account encountered during snapshot creation", "err", err)
 		}
 		// If the account is not yet in-progress, write it out
 		if accMarker == nil || !bytes.Equal(account[:], accMarker) {
@@ -603,7 +590,7 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 				}
 				snapRecoveredAccountMeter.Mark(1)
 			} else {
-				data := types.SlimAccountRLP(acc)
+				data := types.SlimAccountRLP(*acc)
 				dataLen = len(data)
 				rawdb.WriteAccountSnapshot(ctx.batch, account, data)
 				snapGeneratedAccountMeter.Mark(1)

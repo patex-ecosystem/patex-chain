@@ -145,8 +145,11 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 
 	it := trie.NewIterator(s.trie.NodeIterator(conf.Start))
 	for it.Next() {
-		var data types.StateAccount
-		if err := rlp.DecodeBytes(it.Value, &data); err != nil {
+		var (
+			data *types.StateAccount
+			err  error
+		)
+		if data, err = types.StateAccountFromData(it.Value); err != nil {
 			panic(err)
 		}
 		account := DumpAccount{
@@ -169,7 +172,7 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 			account.SecureKey = it.Key
 		}
 		addr := common.BytesToAddress(addrBytes)
-		obj := newObject(s, addr, &data)
+		obj := newObject(s, addr, data)
 		if !conf.SkipCode {
 			account.Code = obj.Code(s.db)
 		}

@@ -96,9 +96,7 @@ func (t *StateTrie) GetAccount(address common.Address) (*types.StateAccount, err
 	if res == nil || err != nil {
 		return nil, err
 	}
-	ret := new(types.StateAccount)
-	err = rlp.DecodeBytes(res, ret)
-	return ret, err
+	return types.StateAccountFromData(res)
 }
 
 // GetAccountByHash does the same thing as GetAccount, however it expects an
@@ -109,8 +107,7 @@ func (t *StateTrie) GetAccountByHash(addrHash common.Hash) (*types.StateAccount,
 	if res == nil || err != nil {
 		return nil, err
 	}
-	ret := new(types.StateAccount)
-	err = rlp.DecodeBytes(res, ret)
+	ret, err := types.StateAccountFromData(res)
 	return ret, err
 }
 
