@@ -402,6 +402,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		sender           = vm.AccountRef(msg.From)
 		rules            = st.evm.ChainConfig().Rules(st.evm.Context.BlockNumber, st.evm.Context.Random != nil, st.evm.Context.Time)
 		contractCreation = msg.To == nil
+		gasTracker       = vm.NewGasTracker()
 	)
 
 	// Check clauses 4-5, subtract intrinsic gas if everything is correct
@@ -413,6 +414,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gasRemaining, gas)
 	}
 	st.gasRemaining -= gas
+	gasTracker.UseGas(params.BlastGasAddress, gas)
 
 	// Check clause 6
 	if msg.Value.Sign() > 0 && !st.evm.Context.CanTransfer(st.state, msg.From, msg.Value) {
@@ -434,11 +436,11 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		vmerr error // vm errors do not effect consensus and are therefore not assigned to err
 	)
 	if contractCreation {
-		ret, _, st.gasRemaining, vmerr = st.evm.Create(sender, msg.Data, st.gasRemaining, msg.Value)
+		ret, _, st.gasRemaining, vmerr = st.evm.Create(sender, msg.Data, st.gasRemaining, msg.Value, gasTracker)
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From, st.state.GetNonce(sender.Address())+1)
-		ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), msg.Data, st.gasRemaining, msg.Value)
+		ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), msg.Data, st.gasRemaining, msg.Value, gasTracker)
 	}
 
 	// if deposit: skip refunds, skip tipping coinbase
@@ -456,15 +458,19 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 			ReturnData: ret,
 		}, nil
 	}
+	// check if blast gas accounting == ethereum gas accounting
+	isGasAccountingCorrect := st.gasUsed() == gasTracker.GetGasUsed()
+
 	// Note for deposit tx there is no ETH refunded for unused gas, but that's taken care of by the fact that gasPrice
 	// is always 0 for deposit tx. So calling refundGas will ensure the gasUsed accounting is correct without actually
 	// changing the sender's balance
+	var userRefund uint64
 	if !rules.IsLondon {
 		// Before EIP-3529: refunds were capped to gasUsed / 2
-		st.refundGas(params.RefundQuotient)
+		userRefund = st.refundGas(params.RefundQuotient)
 	} else {
 		// After EIP-3529: refunds are capped to gasUsed / 5
-		st.refundGas(params.RefundQuotientEIP3529)
+		userRefund = st.refundGas(params.RefundQuotientEIP3529)
 	}
 	if st.msg.IsDepositTx && rules.IsPatexRegolith {
 		// Skip coinbase payments for deposit tx in Regolith
@@ -479,17 +485,20 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		effectiveTip = cmath.BigMin(msg.GasTipCap, new(big.Int).Sub(msg.GasFeeCap, st.evm.Context.BaseFee))
 	}
 
-	if st.evm.Config.NoBaseFee && msg.GasFeeCap.Sign() == 0 && msg.GasTipCap.Sign() == 0 {
-		// Skip fee payment when NoBaseFee is set and the fee fields
-		// are 0. This avoids a negative effectiveTip being applied to
-		// the coinbase when simulating calls.
-	} else {
+	// Skip fee payment when NoBaseFee is set and the fee fields
+	// are 0. This avoids a negative effectiveTip being applied to
+	// the coinbase when simulating calls.
+	skipTip := st.evm.Config.NoBaseFee && msg.GasFeeCap.Sign() == 0 && msg.GasTipCap.Sign() == 0
+	if !skipTip && !isGasAccountingCorrect { // --> default to original behavior is gas accounting is not correct. CANARY
+		// if gas accounting is incorrect, priority fees accumulates to coinbase recipient
 		fee := new(big.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTip)
 		halfFee1 := new(big.Int).Div(fee, big.NewInt(2))
 		halfFee2 := new(big.Int).Sub(fee, halfFee1)
+		//first half of fee add to coinbase address
 		st.state.AddBalance(st.evm.Context.Coinbase, halfFee1)
 
+		//second half of fee add to staking rewarder address
 		if st.evm.ChainConfig().ChainID.Cmp(params.MainnetChainID) == 0 {
 			st.state.AddBalance(params.PATEXMainnetStakingRewarderFeeRecipient, halfFee2)
 		} else {
@@ -500,7 +509,15 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	// Check that we are post bedrock to enable pt-geth to be able to create pseudo pre-bedrock blocks (these are pre-bedrock, but don't follow l2 geth rules)
 	// Note patexConfig will not be nil if rules.IsPatexBedrock is true
 	if patexConfig := st.evm.ChainConfig().Patex; patexConfig != nil && rules.IsPatexBedrock {
-		st.state.AddBalance(params.PatexBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
+		if !isGasAccountingCorrect {
+			st.state.AddBalance(params.PatexBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee)) // add base fee to base fee recipient
+		} else if skipTip { // just distribute base fee back to holders --> should only happen on simulation
+			gasTracker.AllocateDevGas(st.evm.Context.BaseFee, userRefund, st.state, st.evm.Context.Time)
+		} else { // distribute blast fee = base + tip back to holders
+			blastFee := new(big.Int).Add(effectiveTip, st.evm.Context.BaseFee)
+			gasTracker.AllocateDevGas(blastFee, userRefund, st.state, st.evm.Context.Time)
+		}
+
 		if cost := st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.evm.Context.Time, st.msg.RollupDataGas, st.msg.IsDepositTx); cost != nil {
 			st.state.AddBalance(params.PatexL1FeeRecipient, cost)
 		}
@@ -513,7 +530,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	}, nil
 }
 
-func (st *StateTransition) refundGas(refundQuotient uint64) {
+func (st *StateTransition) refundGas(refundQuotient uint64) uint64 {
 	// Apply refund counter, capped to a refund quotient
 	refund := st.gasUsed() / refundQuotient
 	if refund > st.state.GetRefund() {
@@ -528,6 +545,7 @@ func (st *StateTransition) refundGas(refundQuotient uint64) {
 	// Also return remaining gas to the block gas counter so it is
 	// available for the next transaction.
 	st.gp.AddGas(st.gasRemaining)
+	return refund
 }
 
 // gasUsed returns the amount of gas used up by the state transition.

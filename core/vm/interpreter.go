@@ -45,7 +45,7 @@ type EVMInterpreter struct {
 	table *JumpTable
 
 	hasher    crypto.KeccakState // Keccak256 hasher instance shared across opcodes
-	hasherBuf common.Hash        // Keccak256 hasher result array shared aross opcodes
+	hasherBuf common.Hash        // Keccak256 hasher result array shared across opcodes
 
 	readOnly   bool   // Whether to throw on stateful modifications
 	returnData []byte // Last CALL's return data for subsequent reuse
@@ -106,6 +106,11 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	// Increment the call depth which is restricted to 1024
 	in.evm.depth++
 	defer func() { in.evm.depth-- }()
+
+	// Increment the # of frames processed
+	if contract.gasTracker.GetGasUsedByContract(contract.Address()) == 0 {
+		in.evm.frameCount++
+	}
 
 	// Make sure the readOnly is only set if we aren't in readOnly yet.
 	// This also makes sure that the readOnly flag isn't removed for child calls.
@@ -183,7 +188,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		} else if sLen > operation.maxStack {
 			return nil, &ErrStackOverflow{stackLen: sLen, limit: operation.maxStack}
 		}
-		if !contract.UseGas(cost) {
+		if !contract.UseGasForConstantCost(cost) {
 			return nil, ErrOutOfGas
 		}
 		if operation.dynamicGas != nil {
@@ -209,7 +214,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			var dynamicCost uint64
 			dynamicCost, err = operation.dynamicGas(in.evm, contract, stack, mem, memorySize)
 			cost += dynamicCost // for tracing
-			if err != nil || !contract.UseGas(dynamicCost) {
+			if err != nil || !contract.UseGasWithOp(dynamicCost, op, in.evm) {
 				return nil, ErrOutOfGas
 			}
 			// Do tracing before memory expansion

@@ -191,6 +191,10 @@ const (
 
 	BlobTxMinDataGasprice            = 1       // Minimum gas price for data blobs
 	BlobTxDataGaspriceUpdateFraction = 2225652 // Controls the maximum rate of change for data gas price
+
+	// Blast-specific gas parameters
+	BlastMaxFrameCount      int    = 5
+	BlastGasParamStorageGas uint64 = SstoreResetGasEIP2200 + ColdSloadCostEIP2929
 )
 
 // Gas discount table for BLS12-381 G1 and G2 multi exponentiation operations

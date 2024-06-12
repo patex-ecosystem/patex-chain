@@ -17,12 +17,14 @@
 package runtime
 
 import (
+	"errors"
 	"math"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
@@ -106,7 +108,7 @@ func Execute(code, input []byte, cfg *Config) ([]byte, *state.StateDB, error) {
 	setDefaults(cfg)
 
 	if cfg.State == nil {
-		cfg.State, _ = state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
 	}
 	var (
 		address = common.BytesToAddress([]byte("contract"))
@@ -122,13 +124,19 @@ func Execute(code, input []byte, cfg *Config) ([]byte, *state.StateDB, error) {
 	// set the receiver's (the executing contract) code for execution.
 	cfg.State.SetCode(address, code)
 	// Call the code with the given configuration.
-	ret, _, err := vmenv.Call(
+	gasTracker := vm.NewGasTracker()
+	ret, leftOverGas, err := vmenv.Call(
 		sender,
 		common.BytesToAddress([]byte("contract")),
 		input,
 		cfg.GasLimit,
 		cfg.Value,
+		gasTracker,
 	)
+	gasUsed := cfg.GasLimit - leftOverGas
+	if gasUsed != gasTracker.GetGasUsed() {
+		return ret, cfg.State, errors.New("gas does not match")
+	}
 	return ret, cfg.State, err
 }
 
@@ -140,7 +148,7 @@ func Create(input []byte, cfg *Config) ([]byte, common.Address, uint64, error) {
 	setDefaults(cfg)
 
 	if cfg.State == nil {
-		cfg.State, _ = state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
 	}
 	var (
 		vmenv  = NewEnv(cfg)
@@ -152,12 +160,18 @@ func Create(input []byte, cfg *Config) ([]byte, common.Address, uint64, error) {
 	// - reset transient storage(eip 1153)
 	cfg.State.Prepare(rules, cfg.Origin, cfg.Coinbase, nil, vm.ActivePrecompiles(rules), nil)
 	// Call the code with the given configuration.
+	gasTracker := vm.NewGasTracker()
 	code, address, leftOverGas, err := vmenv.Create(
 		sender,
 		input,
 		cfg.GasLimit,
 		cfg.Value,
+		gasTracker,
 	)
+	gasUsed := cfg.GasLimit - leftOverGas
+	if gasUsed != gasTracker.GetGasUsed() {
+		return code, address, leftOverGas, errors.New("gas does not match")
+	}
 	return code, address, leftOverGas, err
 }
 
@@ -181,12 +195,18 @@ func Call(address common.Address, input []byte, cfg *Config) ([]byte, uint64, er
 	statedb.Prepare(rules, cfg.Origin, cfg.Coinbase, &address, vm.ActivePrecompiles(rules), nil)
 
 	// Call the code with the given configuration.
+	gasTracker := vm.NewGasTracker()
 	ret, leftOverGas, err := vmenv.Call(
 		sender,
 		address,
 		input,
 		cfg.GasLimit,
 		cfg.Value,
+		gasTracker,
 	)
+	gasUsed := cfg.GasLimit - leftOverGas
+	if gasUsed != gasTracker.GetGasUsed() {
+		return ret, leftOverGas, errors.New("gas does not match")
+	}
 	return ret, leftOverGas, err
 }
