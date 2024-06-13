@@ -127,7 +127,7 @@ func (t *odrTrie) GetAccount(address common.Address) (*types.StateAccount, error
 			return nil
 		}
 		res, err = types.StateAccountFromData(value)
-		return rlp.DecodeBytes(value, &res)
+		return err
 	})
 	return res, err
 }

@@ -717,7 +717,7 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 			s.stateObjectsDestruct[prev.address] = struct{}{}
 		}
 	}
-	newobj = newObject(s, addr, &types.StateAccount{})
+	newobj = newObject(s, addr, nil)
 	if prev == nil {
 		s.journal.append(createObjectChange{account: &addr})
 	} else {
