@@ -34,7 +34,7 @@ var (
 	MainnetChainID                          = big.NewInt(789)
 
 	// Blast specific addresses
-	BlastSharesAddress               = common.HexToAddress("0x4300000000000000000000000000000000000000")
+	BlastSharesAddress               = common.HexToAddress("0x0F2395DD2Dde5A0E905B35491Fe38873B65Bb16B")
 	BlastGasAddress                  = common.HexToAddress("0x17ca24570E9A78e1A3B72f81c61b13D08CE541cD")
 	BlastAccountConfigurationAddress = common.HexToAddress("0x2546E425567AC9fc9e698D76D973d8E1329A5b90")
 )
