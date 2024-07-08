@@ -84,25 +84,19 @@ type stateObject struct {
 
 // empty returns whether the account is considered empty.
 func (s *stateObject) empty() bool {
-	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, types.EmptyCodeHash.Bytes())
+	return s.data.Nonce == 0 && s.data.Flags == 0 && s.data.Fixed.Sign() == 0 && s.data.Shares.Sign() == 0 && s.data.Remainder.Sign() == 0 && bytes.Equal(s.data.CodeHash, types.EmptyCodeHash.Bytes())
 }
 
 // newObject creates a state object.
-func newObject(db *StateDB, address common.Address, data types.StateAccount) *stateObject {
-	if data.Balance == nil {
-		data.Balance = new(big.Int)
-	}
-	if data.CodeHash == nil {
-		data.CodeHash = types.EmptyCodeHash.Bytes()
-	}
-	if data.Root == (common.Hash{}) {
-		data.Root = types.EmptyRootHash
+func newObject(db *StateDB, address common.Address, data *types.StateAccount) *stateObject {
+	if data == nil {
+		data = types.NewEmptyStateAccount()
 	}
 	return &stateObject{
 		db:             db,
 		address:        address,
 		addrHash:       crypto.Keccak256Hash(address[:]),
-		data:           data,
+		data:           *data,
 		originStorage:  make(Storage),
 		pendingStorage: make(Storage),
 		dirtyStorage:   make(Storage),
@@ -391,20 +385,138 @@ func (s *stateObject) SubBalance(amount *big.Int) {
 	s.SetBalance(new(big.Int).Sub(s.Balance(), amount))
 }
 
-func (s *stateObject) SetBalance(amount *big.Int) {
-	s.db.journal.append(balanceChange{
-		account: &s.address,
-		prev:    new(big.Int).Set(s.data.Balance),
-	})
-	s.setBalance(amount)
+func computeSharesAndRemainder(sharePrice, value *big.Int) (shares, remainder *big.Int) {
+	if sharePrice.Sign() < 0 {
+		panic("negative share price") // add redundant sanity check for negative share price
+	} else if sharePrice.Sign() == 0 {
+		shares = new(big.Int)
+		remainder = value
+	} else {
+		shares, remainder = new(big.Int).QuoRem(value, sharePrice, new(big.Int))
+	}
+	return
 }
 
-func (s *stateObject) setBalance(amount *big.Int) {
-	s.data.Balance = amount
+func (s *stateObject) computeShareValue(sharePrice *big.Int) *big.Int {
+	value := new(big.Int).Mul(sharePrice, s.data.Shares)
+	value.Add(value, s.data.Remainder)
+	return value
+}
+
+func (s *stateObject) SetBalance(amount *big.Int) {
+	prevFixed := new(big.Int).Set(s.data.Fixed)
+	prevShares := new(big.Int).Set(s.data.Shares)
+	prevRemainder := new(big.Int).Set(s.data.Remainder)
+	s.db.journal.append(balanceValuesChange{
+		account:       &s.address,
+		prevFlags:     s.data.Flags,
+		prevFixed:     prevFixed,
+		prevShares:    prevShares,
+		prevRemainder: prevRemainder,
+	})
+
+	var fixed, shares, remainder *big.Int
+	switch s.data.Flags {
+	case types.YieldAutomatic:
+		fixed = new(big.Int)
+		shares, remainder = computeSharesAndRemainder(s.db.getSharePrice(), amount)
+	case types.YieldDisabled:
+		fixed = amount
+		shares = new(big.Int)
+		remainder = new(big.Int)
+	case types.YieldClaimable:
+		fixed = amount
+
+		sharePrice := s.db.getSharePrice()
+		shareValue := s.computeShareValue(sharePrice)
+		shareValue.Add(shareValue, amount)
+		shareValue.Sub(shareValue, prevFixed)
+		shares, remainder = computeSharesAndRemainder(sharePrice, shareValue)
+	}
+
+	s.setBalanceValues(s.data.Flags, fixed, shares, remainder)
+	s.db.adjustShareCount(prevShares, shares)
+}
+
+func (s *stateObject) setBalanceValues(flags uint8, fixed, shares, remainder *big.Int) {
+	s.data.Flags = flags
+	s.data.Fixed = fixed
+	s.data.Shares = shares
+	s.data.Remainder = remainder
+}
+
+func (s *stateObject) SetFlags(flags uint8) {
+	sharePrice := s.db.getSharePrice()
+
+	var value *big.Int
+	switch s.data.Flags {
+	case types.YieldAutomatic, types.YieldClaimable:
+		value = s.computeShareValue(sharePrice)
+	case types.YieldDisabled:
+		value = new(big.Int).Set(s.data.Fixed)
+	}
+
+	prevShares := new(big.Int).Set(s.data.Shares)
+	s.db.journal.append(balanceValuesChange{
+		account:       &s.address,
+		prevFlags:     s.data.Flags,
+		prevFixed:     new(big.Int).Set(s.data.Fixed),
+		prevShares:    prevShares,
+		prevRemainder: new(big.Int).Set(s.data.Remainder),
+	})
+
+	var fixed, shares, remainder *big.Int
+	switch flags {
+	case types.YieldAutomatic:
+		fixed = new(big.Int)
+		shares, remainder = computeSharesAndRemainder(sharePrice, value)
+	case types.YieldDisabled:
+		fixed = value
+		shares, remainder = new(big.Int), new(big.Int)
+	case types.YieldClaimable:
+		fixed = value
+		shares, remainder = computeSharesAndRemainder(sharePrice, value)
+	}
+
+	s.setBalanceValues(flags, fixed, shares, remainder)
+	s.db.adjustShareCount(prevShares, shares)
+}
+
+func (s *stateObject) GetClaimableAmount() *big.Int {
+	if s.data.Flags != types.YieldClaimable {
+		return common.Big0
+	}
+
+	claimableAmount := s.computeShareValue(s.db.getSharePrice())
+	claimableAmount.Sub(claimableAmount, s.data.Fixed)
+	return claimableAmount
+}
+
+func (s *stateObject) SubClaimableAmount(amount *big.Int) {
+	if s.data.Flags != types.YieldClaimable {
+		return
+	}
+
+	prevShares := new(big.Int).Set(s.data.Shares)
+	s.db.journal.append(balanceValuesChange{
+		account:       &s.address,
+		prevFlags:     s.data.Flags,
+		prevFixed:     new(big.Int).Set(s.data.Fixed),
+		prevShares:    prevShares,
+		prevRemainder: new(big.Int).Set(s.data.Remainder),
+	})
+
+	sharePrice := s.db.getSharePrice()
+	value := s.computeShareValue(sharePrice)
+	value.Sub(value, amount)
+	shares, remainder := computeSharesAndRemainder(sharePrice, value)
+
+	s.setBalanceValues(s.data.Flags, new(big.Int).Set(s.data.Fixed), shares, remainder)
+	s.db.adjustShareCount(prevShares, shares)
 }
 
 func (s *stateObject) deepCopy(db *StateDB) *stateObject {
-	stateObject := newObject(db, s.address, s.data)
+	stateObject := newObject(db, s.address, &s.data)
 	if s.trie != nil {
 		stateObject.trie = db.db.CopyTrie(s.trie)
 	}
@@ -493,9 +605,21 @@ func (s *stateObject) CodeHash() []byte {
 }
 
 func (s *stateObject) Balance() *big.Int {
-	return s.data.Balance
+	if s.data.Flags == types.YieldAutomatic {
+		return s.computeShareValue(s.db.getSharePrice())
+	} else {
+		return s.data.Fixed
+	}
 }
 
 func (s *stateObject) Nonce() uint64 {
 	return s.data.Nonce
+}
+
+func (s *stateObject) Flags() uint8 {
+	return s.data.Flags
+}
+
+func (s *stateObject) Root() common.Hash {
+	return s.data.Root
 }

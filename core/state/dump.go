@@ -49,7 +49,11 @@ type DumpCollector interface {
 
 // DumpAccount represents an account in the state.
 type DumpAccount struct {
+	Flags     uint8                  `json:"flags"`
 	Balance   string                 `json:"balance"`
+	Fixed     string                 `json:"fixed"`
+	Shares    string                 `json:"shares"`
+	Remainder string                 `json:"remainder"`
 	Nonce     uint64                 `json:"nonce"`
 	Root      hexutil.Bytes          `json:"root"`
 	CodeHash  hexutil.Bytes          `json:"codeHash"`
@@ -141,12 +145,18 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 
 	it := trie.NewIterator(s.trie.NodeIterator(conf.Start))
 	for it.Next() {
-		var data types.StateAccount
-		if err := rlp.DecodeBytes(it.Value, &data); err != nil {
+		var (
+			data *types.StateAccount
+			err  error
+		)
+		if data, err = types.StateAccountFromData(it.Value); err != nil {
 			panic(err)
 		}
 		account := DumpAccount{
-			Balance:   data.Balance.String(),
+			Flags:     data.Flags,
+			Fixed:     data.Fixed.String(),
+			Shares:    data.Shares.String(),
+			Remainder: data.Remainder.String(),
 			Nonce:     data.Nonce,
 			Root:      data.Root[:],
 			CodeHash:  data.CodeHash,

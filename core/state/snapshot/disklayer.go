@@ -18,6 +18,8 @@ package snapshot
 
 import (
 	"bytes"
+	"github.com/ethereum/go-ethereum/core/types"
+	"math/big"
 	"sync"
 
 	"github.com/VictoriaMetrics/fastcache"
@@ -65,7 +67,7 @@ func (dl *diskLayer) Stale() bool {
 
 // Account directly retrieves the account associated with a particular hash in
 // the snapshot slim data format.
-func (dl *diskLayer) Account(hash common.Hash) (*Account, error) {
+func (dl *diskLayer) Account(hash common.Hash) (*types.SlimAccount, error) {
 	data, err := dl.AccountRLP(hash)
 	if err != nil {
 		return nil, err
@@ -73,9 +75,19 @@ func (dl *diskLayer) Account(hash common.Hash) (*Account, error) {
 	if len(data) == 0 { // can be both nil and []byte{}
 		return nil, nil
 	}
-	account := new(Account)
+	account := new(types.SlimAccount)
 	if err := rlp.DecodeBytes(data, account); err != nil {
-		panic(err)
+		legacy := new(types.StateAccountLegacy)
+		if err := rlp.DecodeBytes(data, legacy); err != nil {
+			panic(err)
+		}
+		account.Nonce = legacy.Nonce
+		account.Flags = types.YieldDisabled
+		account.Fixed = legacy.Balance
+		account.Shares = new(big.Int)
+		account.Remainder = new(big.Int)
+		account.Root = legacy.Root
+		account.CodeHash = legacy.CodeHash
 	}
 	return account, nil
 }

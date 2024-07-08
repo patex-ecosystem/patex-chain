@@ -157,7 +157,7 @@ func gasEip2929AccountCheck(evm *EVM, contract *Contract, stack *Stack, mem *Mem
 	return 0, nil
 }
 
-func makeCallVariantGasCallEIP2929(oldCalculator gasFunc) gasFunc {
+func makeCallVariantGasCallEIP2929(oldCalculator gasFunc, isProxiedCall bool) gasFunc {
 	return func(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 		addr := common.Address(stack.Back(1).Bytes20())
 		// Check slot presence in the access list
@@ -165,11 +165,23 @@ func makeCallVariantGasCallEIP2929(oldCalculator gasFunc) gasFunc {
 		// The WarmStorageReadCostEIP2929 (100) is already deducted in the form of a constant cost, so
 		// the cost to charge for cold access, if any, is Cold - Warm
 		coldCost := params.ColdAccountAccessCostEIP2929 - params.WarmStorageReadCostEIP2929
+
+		// set cold cost temp variable to 0 to reset
+		evm.coldCostTemp = 0
 		if !warmAccess {
 			evm.StateDB.AddAddressToAccessList(addr)
 			// Charge the remaining difference here already, to correctly calculate available
 			// gas for call
-			if !contract.UseGas(coldCost) {
+			if !contract.UseGasNatively(coldCost) {
+				return 0, ErrOutOfGas
+			}
+		}
+
+		var patexGasCost uint64
+		isNewFrame := contract.gasTracker.GetGasUsedByContract(addr) == 0 && isProxiedCall == false
+		if evm.frameCount > params.PatexMaxFrameCount && isNewFrame {
+			patexGasCost = params.PatexGasParamStorageGas
+			if !contract.UseGasNatively(patexGasCost) {
 				return 0, ErrOutOfGas
 			}
 		}
@@ -179,23 +191,38 @@ func makeCallVariantGasCallEIP2929(oldCalculator gasFunc) gasFunc {
 		// - memory expansion
 		// - 63/64ths rule
 		gas, err := oldCalculator(evm, contract, stack, mem, memorySize)
-		if warmAccess || err != nil {
+		if err != nil {
 			return gas, err
 		}
 		// In case of a cold access, we temporarily add the cold charge back, and also
 		// add it to the returned gas. By adding it to the return, it will be charged
 		// outside of this function, as part of the dynamic gas, and that will make it
 		// also become correctly reported to tracers.
-		contract.Gas += coldCost
-		return gas + coldCost, nil
+		additionalGasCost := patexGasCost
+		if !warmAccess {
+			additionalGasCost += coldCost
+		}
+		if additionalGasCost == 0 {
+			return gas, nil
+		}
+		contract.Gas += additionalGasCost
+		contract.gasTracker.RefundGas(contract.Address(), additionalGasCost)
+		evm.coldCostTemp = additionalGasCost
+		var overflow bool
+
+		if gas, overflow = math.SafeAdd(gas, additionalGasCost); overflow {
+			return 0, ErrGasUintOverflow
+		}
+
+		return gas, nil
 	}
 }
 
 var (
-	gasCallEIP2929         = makeCallVariantGasCallEIP2929(gasCall)
-	gasDelegateCallEIP2929 = makeCallVariantGasCallEIP2929(gasDelegateCall)
-	gasStaticCallEIP2929   = makeCallVariantGasCallEIP2929(gasStaticCall)
-	gasCallCodeEIP2929     = makeCallVariantGasCallEIP2929(gasCallCode)
+	gasCallEIP2929         = makeCallVariantGasCallEIP2929(gasCall, false)
+	gasDelegateCallEIP2929 = makeCallVariantGasCallEIP2929(gasDelegateCall, true)
+	gasStaticCallEIP2929   = makeCallVariantGasCallEIP2929(gasStaticCall, false)
+	gasCallCodeEIP2929     = makeCallVariantGasCallEIP2929(gasCallCode, true)
 	gasSelfdestructEIP2929 = makeSelfdestructGasFn(true)
 	// gasSelfdestructEIP3529 implements the changes in EIP-2539 (no refunds)
 	gasSelfdestructEIP3529 = makeSelfdestructGasFn(false)

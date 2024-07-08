@@ -36,7 +36,7 @@ var (
 	ErrInvalidSig           = errors.New("invalid transaction v, r, s values")
 	ErrUnexpectedProtection = errors.New("transaction type does not supported EIP-155 protected signatures")
 	ErrInvalidTxType        = errors.New("transaction type not valid in this context")
-	ErrTxTypeNotSupported   = errors.New("Fucking transaction type not supported")
+	ErrTxTypeNotSupported   = errors.New("transaction type not supported")
 	ErrGasFeeCapTooLow      = errors.New("fee cap less than base fee")
 	errShortTypedTx         = errors.New("typed transaction too short")
 )

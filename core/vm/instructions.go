@@ -251,6 +251,7 @@ func opKeccak256(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 	size.SetBytes(interpreter.hasherBuf[:])
 	return nil, nil
 }
+
 func opAddress(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	scope.Stack.push(new(uint256.Int).SetBytes(scope.Contract.Address().Bytes()))
 	return nil, nil
@@ -267,6 +268,7 @@ func opOrigin(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	scope.Stack.push(new(uint256.Int).SetBytes(interpreter.evm.Origin.Bytes()))
 	return nil, nil
 }
+
 func opCaller(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	scope.Stack.push(new(uint256.Int).SetBytes(scope.Contract.Caller().Bytes()))
 	return nil, nil
@@ -596,7 +598,7 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 		bigVal = value.ToBig()
 	}
 
-	res, addr, returnGas, suberr := interpreter.evm.Create(scope.Contract, input, gas, bigVal)
+	res, addr, returnGas, suberr := interpreter.evm.Create(scope.Contract, input, gas, bigVal, scope.Contract.gasTracker)
 	// Push item on the stack based on the returned error. If the ruleset is
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
@@ -641,7 +643,7 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 		bigEndowment = endowment.ToBig()
 	}
 	res, addr, returnGas, suberr := interpreter.evm.Create2(scope.Contract, input, gas,
-		bigEndowment, &salt)
+		bigEndowment, &salt, scope.Contract.gasTracker)
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
 		stackvalue.Clear()
@@ -672,6 +674,7 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
 
 	if interpreter.readOnly && !value.IsZero() {
+		scope.Contract.gasTracker.UseGas(scope.Contract.Address(), gas) // use call gas temp
 		return nil, ErrWriteProtection
 	}
 	var bigVal = big0
@@ -679,11 +682,14 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	// By using big0 here, we save an alloc for the most common case (non-ether-transferring contract calls),
 	// but it would make more sense to extend the usage of uint256.Int
 	if !value.IsZero() {
+		// refund params.CallStipend back to caller.
+		// this is correct bc: dynamicCost(gasCall()) > params.CallStipend
+		scope.Contract.gasTracker.RefundGas(scope.Contract.Address(), params.CallStipend) // refund gas back to caller
 		gas += params.CallStipend
 		bigVal = value.ToBig()
 	}
 
-	ret, returnGas, err := interpreter.evm.Call(scope.Contract, toAddr, args, gas, bigVal)
+	ret, returnGas, err := interpreter.evm.Call(scope.Contract, toAddr, args, gas, bigVal, scope.Contract.gasTracker)
 
 	if err != nil {
 		temp.Clear()
@@ -715,11 +721,14 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	//TODO: use uint256.Int instead of converting with toBig()
 	var bigVal = big0
 	if !value.IsZero() {
+		// refund params.CallStipend back to caller.
+		// this is correct bc: dynamicCost(gasCall()) > params.CallStipend
+		scope.Contract.gasTracker.RefundGas(scope.Contract.Address(), params.CallStipend) // refund gas back to caller
 		gas += params.CallStipend
 		bigVal = value.ToBig()
 	}
 
-	ret, returnGas, err := interpreter.evm.CallCode(scope.Contract, toAddr, args, gas, bigVal)
+	ret, returnGas, err := interpreter.evm.CallCode(scope.Contract, toAddr, args, gas, bigVal, scope.Contract.gasTracker)
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -747,7 +756,7 @@ func opDelegateCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	// Get arguments from the memory.
 	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
 
-	ret, returnGas, err := interpreter.evm.DelegateCall(scope.Contract, toAddr, args, gas)
+	ret, returnGas, err := interpreter.evm.DelegateCall(scope.Contract, toAddr, args, gas, scope.Contract.gasTracker)
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -775,7 +784,7 @@ func opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 	// Get arguments from the memory.
 	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
 
-	ret, returnGas, err := interpreter.evm.StaticCall(scope.Contract, toAddr, args, gas)
+	ret, returnGas, err := interpreter.evm.StaticCall(scope.Contract, toAddr, args, gas, scope.Contract.gasTracker)
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -819,6 +828,8 @@ func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 		return nil, ErrWriteProtection
 	}
 	beneficiary := scope.Stack.pop()
+
+	interpreter.evm.StateDB.SetFlags(scope.Contract.Address(), types.YieldAutomatic)
 	balance := interpreter.evm.StateDB.GetBalance(scope.Contract.Address())
 	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance)
 	interpreter.evm.StateDB.Suicide(scope.Contract.Address())

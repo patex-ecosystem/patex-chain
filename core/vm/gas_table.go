@@ -102,7 +102,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 	// Legacy rules should be applied if we are in Petersburg (removal of EIP-1283)
 	// OR Constantinople is not active
 	if evm.chainRules.IsPetersburg || !evm.chainRules.IsConstantinople {
-		// This checks for 3 scenario's and calculates gas accordingly:
+		// This checks for 3 scenarios and calculates gas accordingly:
 		//
 		// 1. From a zero-value address to a non-zero value         (NEW VALUE)
 		// 2. From a non-zero value address to a zero-value address (DELETE)
@@ -302,6 +302,15 @@ func gasCreate2(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memoryS
 	return gas, nil
 }
 
+func patexGasCreationCost(evm *EVM) uint64 {
+	var patexGasCost uint64
+	if evm.frameCount > params.PatexMaxFrameCount {
+		patexGasCost = params.PatexGasParamStorageGas
+	}
+	return patexGasCost
+
+}
+
 func gasCreateEip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
@@ -316,6 +325,12 @@ func gasCreateEip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, m
 	if gas, overflow = math.SafeAdd(gas, moreGas); overflow {
 		return 0, ErrGasUintOverflow
 	}
+
+	patexGasCost := patexGasCreationCost(evm)
+	if gas, overflow = math.SafeAdd(gas, patexGasCost); overflow {
+		return 0, ErrGasUintOverflow
+	}
+
 	return gas, nil
 }
 func gasCreate2Eip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
@@ -332,6 +347,12 @@ func gasCreate2Eip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, 
 	if gas, overflow = math.SafeAdd(gas, moreGas); overflow {
 		return 0, ErrGasUintOverflow
 	}
+
+	patexGasCost := patexGasCreationCost(evm)
+	if gas, overflow = math.SafeAdd(gas, patexGasCost); overflow {
+		return 0, ErrGasUintOverflow
+	}
+
 	return gas, nil
 }
 
@@ -390,6 +411,10 @@ func gasCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize
 	if err != nil {
 		return 0, err
 	}
+
+	// op-code base gas cost
+	evm.baseGasTemp = gas
+
 	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
 		return 0, ErrGasUintOverflow
 	}
@@ -415,6 +440,10 @@ func gasCallCode(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memory
 	if err != nil {
 		return 0, err
 	}
+
+	// op-code base gas cost
+	evm.baseGasTemp = gas
+
 	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
 		return 0, ErrGasUintOverflow
 	}
@@ -430,6 +459,10 @@ func gasDelegateCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, me
 	if err != nil {
 		return 0, err
 	}
+
+	// op-code base gas cost
+	evm.baseGasTemp = gas
+
 	var overflow bool
 	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
 		return 0, ErrGasUintOverflow
@@ -446,6 +479,10 @@ func gasStaticCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memo
 	if err != nil {
 		return 0, err
 	}
+
+	// op-code base gas cost
+	evm.baseGasTemp = gas
+
 	var overflow bool
 	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
 		return 0, ErrGasUintOverflow

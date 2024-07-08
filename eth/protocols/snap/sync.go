@@ -33,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -41,7 +40,6 @@ import (
 	"github.com/ethereum/go-ethereum/light"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/msgrate"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	"golang.org/x/crypto/sha3"
 )
@@ -2277,13 +2275,13 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 		if task.needCode[i] || task.needState[i] {
 			break
 		}
-		slim := snapshot.SlimAccountRLP(res.accounts[i].Nonce, res.accounts[i].Balance, res.accounts[i].Root, res.accounts[i].CodeHash)
+		slim := types.SlimAccountRLP(*res.accounts[i])
 		rawdb.WriteAccountSnapshot(batch, hash, slim)
 
 		// If the task is complete, drop it into the stack trie to generate
 		// account trie nodes for it
 		if !task.needHeal[i] {
-			full, err := snapshot.FullAccountRLP(slim) // TODO(karalabe): Slim parsing can be omitted
+			full, err := types.FullAccountRLP(slim) // TODO(karalabe): Slim parsing can be omitted
 			if err != nil {
 				panic(err) // Really shouldn't ever happen
 			}
@@ -2410,8 +2408,8 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	}
 	accs := make([]*types.StateAccount, len(accounts))
 	for i, account := range accounts {
-		acc := new(types.StateAccount)
-		if err := rlp.DecodeBytes(account, acc); err != nil {
+		var acc *types.StateAccount
+		if acc, err = types.StateAccountFromData(account); err != nil {
 			panic(err) // We created these blobs, we must be able to decode them
 		}
 		accs[i] = acc
@@ -2898,11 +2896,14 @@ func (s *Syncer) onHealByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) e
 // Note it's not concurrent safe, please handle the concurrent issue outside.
 func (s *Syncer) onHealState(paths [][]byte, value []byte) error {
 	if len(paths) == 1 {
-		var account types.StateAccount
-		if err := rlp.DecodeBytes(value, &account); err != nil {
+		var (
+			account *types.StateAccount
+			err     error
+		)
+		if account, err = types.StateAccountFromData(value); err != nil {
 			return nil // Returning the error here would drop the remote peer
 		}
-		blob := snapshot.SlimAccountRLP(account.Nonce, account.Balance, account.Root, account.CodeHash)
+		blob := types.SlimAccountRLP(*account)
 		rawdb.WriteAccountSnapshot(s.stateWriter, common.BytesToHash(paths[0]), blob)
 		s.accountHealed += 1
 		s.accountHealedBytes += common.StorageSize(1 + common.HashLength + len(blob))

@@ -28,6 +28,14 @@ func (op OpCode) IsPush() bool {
 	return PUSH1 <= op && op <= PUSH32
 }
 
+func (op OpCode) IsContractCall() bool {
+	return (op == CALL || op == CALLCODE || op == DELEGATECALL || op == STATICCALL)
+}
+
+func (op OpCode) IsContractCreate() bool {
+	return (op == CREATE || op == CREATE2)
+}
+
 // 0x0 range - arithmetic ops.
 const (
 	STOP       OpCode = 0x0

@@ -35,7 +35,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -368,11 +367,11 @@ func getAccount(triedb *trie.Database, root, hash common.Hash) (types.StateAccou
 	if err != nil {
 		return types.StateAccount{}, err
 	}
-	var acc types.StateAccount
-	if err = rlp.DecodeBytes(blob, &acc); err != nil {
+	var acc *types.StateAccount
+	if acc, err = types.StateAccountFromData(blob); err != nil {
 		return types.StateAccount{}, err
 	}
-	return acc, nil
+	return *acc, nil
 }
 
 // GetHelperTrie returns the post-processed trie root for the given trie ID and section index

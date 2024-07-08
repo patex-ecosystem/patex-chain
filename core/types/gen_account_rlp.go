@@ -12,13 +12,30 @@ func (obj *StateAccount) EncodeRLP(_w io.Writer) error {
 	w := rlp.NewEncoderBuffer(_w)
 	_tmp0 := w.List()
 	w.WriteUint64(obj.Nonce)
-	if obj.Balance == nil {
+	w.WriteUint64(uint64(obj.Flags))
+	if obj.Fixed == nil {
 		w.Write(rlp.EmptyString)
 	} else {
-		if obj.Balance.Sign() == -1 {
+		if obj.Fixed.Sign() == -1 {
 			return rlp.ErrNegativeBigInt
 		}
-		w.WriteBigInt(obj.Balance)
+		w.WriteBigInt(obj.Fixed)
+	}
+	if obj.Shares == nil {
+		w.Write(rlp.EmptyString)
+	} else {
+		if obj.Shares.Sign() == -1 {
+			return rlp.ErrNegativeBigInt
+		}
+		w.WriteBigInt(obj.Shares)
+	}
+	if obj.Remainder == nil {
+		w.Write(rlp.EmptyString)
+	} else {
+		if obj.Remainder.Sign() == -1 {
+			return rlp.ErrNegativeBigInt
+		}
+		w.WriteBigInt(obj.Remainder)
 	}
 	w.WriteBytes(obj.Root[:])
 	w.WriteBytes(obj.CodeHash)

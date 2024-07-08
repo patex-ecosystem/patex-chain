@@ -32,6 +32,12 @@ type StateDB interface {
 	AddBalance(common.Address, *big.Int)
 	GetBalance(common.Address) *big.Int
 
+	GetClaimableAmount(common.Address) *big.Int
+	SubClaimableAmount(common.Address, *big.Int)
+
+	GetFlags(common.Address) uint8
+	SetFlags(common.Address, uint8)
+
 	GetNonce(common.Address) uint64
 	SetNonce(common.Address, uint64)
 

@@ -32,6 +32,11 @@ var (
 	PATEXMainnetStakingRewarderFeeRecipient = common.HexToAddress("0x14d437dbcE158FC528B13025468EF09030354E01")
 	PATEXTestnetStakingRewarderFeeRecipient = common.HexToAddress("0x89183c312de51b4a9d35b1dd8090e68046ead964")
 	MainnetChainID                          = big.NewInt(789)
+
+	// Patex specific addresses
+	PatexSharesAddress               = common.HexToAddress("0x0F2395DD2Dde5A0E905B35491Fe38873B65Bb16B")
+	PatexGasAddress                  = common.HexToAddress("0x17ca24570E9A78e1A3B72f81c61b13D08CE541cD")
+	PatexAccountConfigurationAddress = common.HexToAddress("0x2546E425567AC9fc9e698D76D973d8E1329A5b90")
 )
 
 const (
@@ -186,6 +191,10 @@ const (
 
 	BlobTxMinDataGasprice            = 1       // Minimum gas price for data blobs
 	BlobTxDataGaspriceUpdateFraction = 2225652 // Controls the maximum rate of change for data gas price
+
+	// Patex-specific gas parameters
+	PatexMaxFrameCount      int    = 5
+	PatexGasParamStorageGas uint64 = SstoreResetGasEIP2200 + ColdSloadCostEIP2929
 )
 
 // Gas discount table for BLS12-381 G1 and G2 multi exponentiation operations

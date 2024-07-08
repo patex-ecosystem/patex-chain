@@ -20,6 +20,7 @@ package gethclient
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"runtime"
 	"runtime/debug"
@@ -61,11 +62,14 @@ func (ec *Client) CreateAccessList(ctx context.Context, msg ethereum.CallMsg) (*
 
 // AccountResult is the result of a GetProof operation.
 type AccountResult struct {
-	Address      common.Address  `json:"address"`
 	AccountProof []string        `json:"accountProof"`
-	Balance      *big.Int        `json:"balance"`
+	Address      common.Address  `json:"address"`
 	CodeHash     common.Hash     `json:"codeHash"`
+	Fixed        *big.Int        `json:"fixed"`
+	Flags        uint8           `json:"flags"`
 	Nonce        uint64          `json:"nonce"`
+	Remainder    *big.Int        `json:"remainder"`
+	Shares       *big.Int        `json:"shares"`
 	StorageHash  common.Hash     `json:"storageHash"`
 	StorageProof []StorageResult `json:"storageProof"`
 }
@@ -87,11 +91,14 @@ func (ec *Client) GetProof(ctx context.Context, account common.Address, keys []s
 	}
 
 	type accountResult struct {
-		Address      common.Address  `json:"address"`
 		AccountProof []string        `json:"accountProof"`
-		Balance      *hexutil.Big    `json:"balance"`
+		Address      common.Address  `json:"address"`
 		CodeHash     common.Hash     `json:"codeHash"`
+		Fixed        *hexutil.Big    `json:"fixed"`
+		Flags        hexutil.Uint64  `json:"flags"`
 		Nonce        hexutil.Uint64  `json:"nonce"`
+		Remainder    *hexutil.Big    `json:"remainder"`
+		Shares       *hexutil.Big    `json:"shares"`
 		StorageHash  common.Hash     `json:"storageHash"`
 		StorageProof []storageResult `json:"storageProof"`
 	}
@@ -113,11 +120,14 @@ func (ec *Client) GetProof(ctx context.Context, account common.Address, keys []s
 		})
 	}
 	result := AccountResult{
-		Address:      res.Address,
 		AccountProof: res.AccountProof,
-		Balance:      res.Balance.ToInt(),
-		Nonce:        uint64(res.Nonce),
+		Address:      res.Address,
 		CodeHash:     res.CodeHash,
+		Fixed:        res.Fixed.ToInt(),
+		Flags:        uint8(res.Flags),
+		Nonce:        uint64(res.Nonce),
+		Remainder:    res.Remainder.ToInt(),
+		Shares:       res.Shares.ToInt(),
 		StorageHash:  res.StorageHash,
 		StorageProof: storageResults,
 	}
@@ -139,6 +149,28 @@ func (ec *Client) CallContract(ctx context.Context, msg ethereum.CallMsg, blockN
 	err := ec.c.CallContext(
 		ctx, &hex, "eth_call", toCallArg(msg),
 		toBlockNumArg(blockNumber), overrides,
+	)
+	return hex, err
+}
+
+// CallContractWithBlockOverrides executes a message call transaction, which is directly executed
+// in the VM  of the node, but never mined into the blockchain.
+//
+// blockNumber selects the block height at which the call runs. It can be nil, in which
+// case the code is taken from the latest known block. Note that state from very old
+// blocks might not be available.
+//
+// overrides specifies a map of contract states that should be overwritten before executing
+// the message call.
+//
+// blockOverrides specifies block fields exposed to the EVM that can be overridden for the call.
+//
+// Please use ethclient.CallContract instead if you don't need the override functionality.
+func (ec *Client) CallContractWithBlockOverrides(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int, overrides *map[common.Address]OverrideAccount, blockOverrides BlockOverrides) ([]byte, error) {
+	var hex hexutil.Bytes
+	err := ec.c.CallContext(
+		ctx, &hex, "eth_call", toCallArg(msg),
+		toBlockNumArg(blockNumber), overrides, blockOverrides,
 	)
 	return hex, err
 }
@@ -185,19 +217,15 @@ func toBlockNumArg(number *big.Int) string {
 	if number == nil {
 		return "latest"
 	}
-	pending := big.NewInt(-1)
-	if number.Cmp(pending) == 0 {
-		return "pending"
+	if number.Sign() >= 0 {
+		return hexutil.EncodeBig(number)
 	}
-	finalized := big.NewInt(int64(rpc.FinalizedBlockNumber))
-	if number.Cmp(finalized) == 0 {
-		return "finalized"
+	// It's negative.
+	if number.IsInt64() {
+		return rpc.BlockNumber(number.Int64()).String()
 	}
-	safe := big.NewInt(int64(rpc.SafeBlockNumber))
-	if number.Cmp(safe) == 0 {
-		return "safe"
-	}
-	return hexutil.EncodeBig(number)
+	// It's negative and large, which is invalid.
+	return fmt.Sprintf("<invalid %d>", number)
 }
 
 func toCallArg(msg ethereum.CallMsg) interface{} {
@@ -206,7 +234,7 @@ func toCallArg(msg ethereum.CallMsg) interface{} {
 		"to":   msg.To,
 	}
 	if len(msg.Data) > 0 {
-		arg["data"] = hexutil.Bytes(msg.Data)
+		arg["input"] = hexutil.Bytes(msg.Data)
 	}
 	if msg.Value != nil {
 		arg["value"] = (*hexutil.Big)(msg.Value)
@@ -262,6 +290,55 @@ func (a OverrideAccount) MarshalJSON() ([]byte, error) {
 	}
 	if a.State != nil {
 		output.State = a.State
+	}
+	return json.Marshal(output)
+}
+
+// BlockOverrides specifies the  set of header fields to override.
+type BlockOverrides struct {
+	// Number overrides the block number.
+	Number *big.Int
+	// Difficulty overrides the block difficulty.
+	Difficulty *big.Int
+	// Time overrides the block timestamp. Time is applied only when
+	// it is non-zero.
+	Time uint64
+	// GasLimit overrides the block gas limit. GasLimit is applied only when
+	// it is non-zero.
+	GasLimit uint64
+	// Coinbase overrides the block coinbase. Coinbase is applied only when
+	// it is different from the zero address.
+	Coinbase common.Address
+	// Random overrides the block extra data which feeds into the RANDOM opcode.
+	// Random is applied only when it is a non-zero hash.
+	Random common.Hash
+	// BaseFee overrides the block base fee.
+	BaseFee *big.Int
+}
+
+func (o BlockOverrides) MarshalJSON() ([]byte, error) {
+	type override struct {
+		Number     *hexutil.Big    `json:"number,omitempty"`
+		Difficulty *hexutil.Big    `json:"difficulty,omitempty"`
+		Time       hexutil.Uint64  `json:"time,omitempty"`
+		GasLimit   hexutil.Uint64  `json:"gasLimit,omitempty"`
+		Coinbase   *common.Address `json:"coinbase,omitempty"`
+		Random     *common.Hash    `json:"random,omitempty"`
+		BaseFee    *hexutil.Big    `json:"baseFee,omitempty"`
+	}
+
+	output := override{
+		Number:     (*hexutil.Big)(o.Number),
+		Difficulty: (*hexutil.Big)(o.Difficulty),
+		Time:       hexutil.Uint64(o.Time),
+		GasLimit:   hexutil.Uint64(o.GasLimit),
+		BaseFee:    (*hexutil.Big)(o.BaseFee),
+	}
+	if o.Coinbase != (common.Address{}) {
+		output.Coinbase = &o.Coinbase
+	}
+	if o.Random != (common.Hash{}) {
+		output.Random = &o.Random
 	}
 	return json.Marshal(output)
 }

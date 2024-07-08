@@ -803,8 +803,11 @@ func (db *Database) Update(nodes *MergedNodeSet) error {
 	// to an account trie leaf.
 	if set, present := nodes.sets[common.Hash{}]; present {
 		for _, n := range set.leaves {
-			var account types.StateAccount
-			if err := rlp.DecodeBytes(n.blob, &account); err != nil {
+			var (
+				account *types.StateAccount
+				err     error
+			)
+			if account, err = types.StateAccountFromData(n.blob); err != nil {
 				return err
 			}
 			if account.Root != types.EmptyRootHash {
